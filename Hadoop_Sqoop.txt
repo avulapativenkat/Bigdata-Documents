@@ -1,0 +1,371 @@
+Introduction to Sqoop:
+----------------------
+1. sudo apt-get update
+
+2. sudo apt-get install mysql-server
+
+3. mysql -u root -p
+
+4. sudo service mysql status
+---------------------------------------
+
+create database student;
+
+use student;
+
+CREATE TABLE student(studID INT,deptID INT,studName VARCHAR(30),grade VARCHAR(30),PRIMARY KEY (studID),FOREIGN KEY (deptID) REFERENCES department(deptID));
+
+CREATE TABLE department(deptID INT,deptName VARCHAR(30),PRIMARY KEY(deptID));
+         
+INSERT INTO student VALUES (1001,101,'John','I');
+INSERT INTO student VALUES (1002,101,'Jack','II');
+INSERT INTO student VALUES (1003,102,'James','I');
+INSERT INTO student VALUES (1004,102,'Smith','I');
+INSERT INTO student VALUES (1005,101,'Scott','II');
+INSERT INTO student VALUES (1006,103,'Tiger','I');
+
+
+INSERT INTO department VALUES (101,'B.E.CSE');
+INSERT INTO department VALUES (102,'B.E.ISE');
+INSERT INTO department VALUES (103,'B.E.ECE');
+
+
+CREATE TABLE IF NOT EXISTS blog(blogID INT,studID INT,blogName VARCHAR(30),last_modified DATE, PRIMARY KEY (blogID), FOREIGN KEY (studID) REFERENCES student(studID));
+
+INSERT INTO blog VALUES(10001,1001,"Social",NOW());
+
+==================================================================================================
+
+Sqoop Commands:
+=============
+1. List databases:
+==================
+sqoop list-databases --connect jdbc:mysql://localhost/ --username root --password 1234
+
+2. List Tables:
+==============
+sqoop list-tables --connect jdbc:mysql://localhost/student --username root --password 1234
+
+
+3. Importing a table into HDFS - basic import
+=============================================
+sqoop import \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--table student
+--------------------------------------------------------
+sqoop import \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--table student \
+-m1 \
+--target-dir /sqoopdemos/student
+
+Note:
+====
+ -m argument is to specify number of mappers.
+ --target-dir ==> Specifies the directory on HDFS where Sqoop should import data
+
+---------------------------------------------------------------
+sqoop import \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--table student \
+-m2 \
+--warehouse-dir /mysqlsqoopdemos
+
+4. Import all columns, filter rows using where clause:
+=====================================================
+sqoop import \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--table student  \
+--where "studID > 1003" \
+--as-textfile \
+-m 1 \
+--verbose \
+--target-dir /sqoopdemos/studentfilter
+-----------------------------------------
+sqoop import \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--table student  \
+--where "studID > 1003" \
+--as-sequencefile \
+-m 1 \
+--target-dir /sqoopdemos/studentsequence
+
+5.  Import with a free form query without where clause:
+======================================================
+sqoop import \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--query 'select studID,studName from student where $CONDITIONS' \
+-m 1 \
+--verbose \
+--target-dir /sqoopex/studentquery
+
+6. Import with a free form query with where clause:
+==================================================
+sqoop import \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--query 'select studID,studName from student where studID < 1003 AND $CONDITIONS' \
+-m 1 \
+--target-dir /sqoope/studentquery1
+
+7. Director Connector:
+=====================
+sqoop import \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--query 'select  studID,deptID,studName,grade from student where studID < 1004 AND $CONDITIONS' \
+-m 1 \
+--direct \
+--target-dir /sqoopdemos/studentdirect
+
+8.Split by:
+==========
+sqoop import \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--query 'select  studID,studName from student where $CONDITIONS' \
+--split-by studName \
+--target-dir /sqoopdemos/studentsplit
+11
+// we can even specify the number of mappers,if needed for performance
+
+
+9. Compression:
+===============
+You want to decrease the overall size occupied on HDFS by using compression for generated files.
+
+sqoop import \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--table student \
+--1compress \
+--verbose \
+--target-dir /sqoopdemos/studentcom
+
+
+sqoop import \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--query 'select  studID,deptID,studName,grade from student where $CONDITIONS' \
+--split-by studID \
+--compression-codec org.apache.hadoop.io.compress.BZip2Codec \
+--target-dir /sqoopdemos/studentcompress
+
+10. Incremental imports: Preparation:
+====================================
+sqoop import \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--query 'select * from student where studID <1002 AND $CONDITIONS' \
+--split-by studID \
+-m 1 \
+--target-dir /sqoopdemos/sqoopincrement
+
+Run the incremental import: Importing Only New Data
+===================================================
+sqoop import \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--query 'select * from student where $CONDITIONS' \
+--check-column studID \
+--incremental append \
+--last-value 1001 \
+--split-by studID \
+-m 1 \
+--target-dir /sqoopdemos/sqoopincrement
+
+-------------------------------------------------------------------
+sqoop import \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--table blog \
+--incremental lastmodified \
+--check-column last_modified \
+--last-value "2016-1-26" \
+--target-dir /sqoopdemos/sqoopincre
+
+11. Output line formatting options:
+===================================
+sqoop import \
+--connect jdbc:mysql://10.211.155.57:3306/student \
+--username root \
+--password 1234 \
+--query 'select studID,deptID,studName,grade from student where $CONDITIONS' \
+--fields-terminated-by '\t' \
+--escaped-by \\ \
+--enclosed-by '\"' \
+--split-by studID \
+--target-dir /sqoopdemos/outputformat
+
+12:  Import all tables:
+=======================
+sqoop import-all-tables \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+
+sqoop import-all-tables \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--exclude-tables department
+
+
+13. Direct and quick queries or inserts and updates with sqoop eval:
+===================================================================
+Using eval tool, we can evaluate any type of SQL query. 
+
+Query:
+=====
+sqoop eval --connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--query "select * from student limit 2"
+
+
+Insert:
+=======
+sqoop eval --connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+-e "insert into student values(1007,103,'Joshi','I')"
+
+
+14. Joining Two Tables:
+======================
+sqoop import  --connect jdbc:mysql://localhost:3306/student \
+ --username root \
+ --password 1234 \
+ --query 'select s.studID,s.studName,s.grade,d.deptName from student as s join department d on s.deptID=d.deptID where $CONDITIONS' \
+ --split-by studID \
+ --m1
+ --target-dir /sqoopdemos/Joinsdemo
+
+
+15. Import from mysql into Hive:
+===============================
+create database department;
+
+use department;
+
+create table department(dept_no int,dept_name varchar(20), PRIMARY KEY(dept_no));
+
+insert into department values(1,'Customer Service');
+insert into department values(2,'Development');
+insert into department values(3 ,'Finance');
+insert into department values(4,'Human Resources');
+insert into department values(5,'Marketing');
+insert into department values(6,'Production');       
+
+ 
+sqoop import \
+--connect jdbc:mysql://localhost:3306/department \
+--username root \
+--password 1234 \
+--table department \
+--direct \
+-m 1 \
+--hive-import \
+--create-hive-table \
+--hive-table department_mysql_example 
+
+Validating:
+==========
+hive> select * from department_mysql_example;
+
+
+Sqoop Export:
+============
+1. Export data from HDFS to Mysql:
+=================================
+
+Create Export Table:
+===================
+create table student_export(studID int, deptID int, studName varchar(20),grade varchar(5),PRIMARY KEY (studID));
+
+1. Export in insert mode
+========================
+
+sqoop export \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--table student_export \
+--export-dir /sqoopdemos/student \
+--batch
+
+incremental export?
+
+text-file export?
+
+more than one row at a time.
+-------------------------------------------------------
+1. specify the number of records that will be used in each insert statement:  insert into table employee values(,,,)(,,,)
+
+sqoop export -Dsqoop.export.records.per.statement=2 \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--table student_export \
+--export-dir /sqoopdemos/student 
+
+2. set how many rows will be inserted per transaction
+
+sqoop export -Dsqoop.export.records.per.transaction=2 \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--table student_export \
+--export-dir /sqoopdemos/student
+
+The value specified in sqoop.export.statements.per.transaction determines how many insert statements will be issued on the database prior to committing the transaction and starting a new one.
+
+2. Export in update mode:
+========================
+sqoop export \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--table student  \
+--direct \
+--update-key studID \
+--update-mode updateonly \
+--export-dir /sqoopdemos/student
+
+3. Exporting into a Subset of Columns
+=====================================
+sqoop export \
+--connect jdbc:mysql://localhost:3306/student \
+--username root \
+--password 1234 \
+--table student \
+--update-key studID \
+--update-mode updateonly \
+--export-dir /sqoopdemos/student \
+--columns studID,deptID,studName
+-------------------------------------------------------------------------------------------
+II. CODEGEN:-
+============
+1. sqoop codegen --connect jdbc:mysql://localhost:3306/hadoop --username root -P --query --class-name PeopleQuery 'select id,name,place,age from people WHERE $CONDITIONS'
+2. sqoop codegen --connect jdbc:mysql://localhost:3306/hadoop --username root -P --query 'select id,name,place,age from people WHERE $CONDITIONS'
+3. sqoop codegen --connect jdbc:mysql://localhost:3306/hadoop --username root -P --table student
+
